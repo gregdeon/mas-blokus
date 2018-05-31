@@ -1,4 +1,5 @@
 import numpy as np
+import random
 
 """
 Running this file will start a 4-(human)-player game of Blokus.
@@ -18,6 +19,13 @@ NUM_PLAYERS = 4
 CORNER_SENTINEL = 255
 PIECES_FILE = 'pieces.txt'
 VERBOSE = True
+PRINT_COLOUR = True
+
+if PRINT_COLOUR:
+    from colorama import Fore, Back, Style, init
+    init(convert=True)
+    FORE_ARRAY = [Style.RESET_ALL, Fore.RED, Fore.BLUE, Fore.GREEN, Fore.YELLOW]
+    BACK_ARRAY = [Style.RESET_ALL, Back.RED, Back.BLUE, Back.GREEN, Back.YELLOW]
 
 
 #NOT the complete game state
@@ -32,40 +40,56 @@ class Board:
         self.board[BOARD_HEIGHT+1][BOARD_WIDTH+1] = CORNER_SENTINEL
 
     def print_board(self):
-        print(str(self.board[1:BOARD_HEIGHT+1,1:BOARD_WIDTH+1]) + '\n')
+        if PRINT_COLOUR:
+            self.print_board_coloured()
+        else:
+            print(str(self.board[1:BOARD_HEIGHT+1,1:BOARD_WIDTH+1]) + '\n')
+
+    def print_board_coloured(self):
+        for y in range(BOARD_HEIGHT):
+            line = ''
+            for x in range(BOARD_WIDTH):
+                piece = self.board[y+1][x+1]
+                if(piece > 0):
+                    line += FORE_ARRAY[piece] + BACK_ARRAY[piece] + str(piece)
+                else:
+                    line += Style.RESET_ALL + '.'
+            line += Style.RESET_ALL
+            print(line)
+        print('')
 
     # returns True iff the given piece, orientation, and position satisfy the rules of Blokus
     # note that player_id and piece_id inputs are assumed to be valid
-    def legal_play(self, player_id, first_round, piece, piece_or, row, col):
+    def legal_play(self, player_id, first_round, piece, piece_or, row, col, verbose=VERBOSE):
         area_mask = piece.area_masks[piece_or]
         adj_mask = piece.adj_masks[piece_or]
         diag_mask = piece.diag_masks[piece_or]
         if row < 0 or row+np.shape(area_mask)[0] > BOARD_HEIGHT or col < 0 or col+np.shape(area_mask)[1] > BOARD_WIDTH:
-            if VERBOSE:
+            if verbose:
                 print('Row or Column out of range')
             return False
 
         board_chunk = self.board[row+1:row+1+np.shape(area_mask)[0],col+1:col+1+np.shape(area_mask)[1]]
         padded_board_chunk = self.board[row:row+np.shape(adj_mask)[0],col:col+np.shape(adj_mask)[1]]
+        # Note: there's no reason for this check because the first move is guaranteed to take over the corner
         if first_round:
             padded_board_chunk = (padded_board_chunk==player_id) + (padded_board_chunk==CORNER_SENTINEL)
         else:
             padded_board_chunk = padded_board_chunk==player_id
 
         if np.any(np.logical_and(board_chunk, area_mask)):
-            if VERBOSE:
+            if verbose:
                 print('Overlapping another piece')
             return False
         if np.any(np.logical_and(padded_board_chunk, adj_mask)):
-            if VERBOSE:
+            if verbose:
                 print('Directly adjacent to your own piece')
             return False
         if not np.any(np.logical_and(padded_board_chunk, diag_mask)):
-            if VERBOSE:
+            if verbose:
                 print('Not diagonally touching your own piece')
             return False
         return True
-
 
 #inherit from this class for bots
 class Player:
@@ -93,6 +117,9 @@ class Player:
 
         if VERBOSE:
             game.board.print_board()
+
+            # Print all legal moves to help pick a good one
+            print(game.get_legal_moves(self.id))
 
         while not valid_input:
             key_str = input('Player ' + str(self.id) + ', enter piece ID and orientation (e.g. 0 0):\n')
@@ -142,6 +169,17 @@ class Player:
                     print('ERROR: Too few input tokens\n')
 
         return piece_id, piece_or, row, col
+
+class RandomPlayer(Player):
+    def get_play(self, game):
+        legal_moves = game.get_legal_moves(self.id)
+        try: 
+            move = random.sample(legal_moves, 1)[0]
+            (piece_id, orientation, col, row) = move
+            return piece_id, orientation, row, col
+        except ValueError:
+            # There are no legal moves
+            return (-1, -1, -1, -1)
 
 
 #keeps all of the masks associated with one of the 21 pieces
@@ -208,6 +246,23 @@ class Game:
         board_chunk = self.board.board[row+1:row+1+piece_shape[0],col+1:col+1+piece_shape[1]]
         self.board.board[row+1:row+1+piece_shape[0],col+1:col+1+piece_shape[1]] = np.bitwise_or(board_chunk,piece_stamp)
 
+    def get_legal_moves(self, player_id):
+        moves_set = set()
+
+        player = self.players[player_id - 1]
+        piece_list = self.pieces
+        for piece_id in range(len(piece_list)):
+            if not player.pieces[piece_id]:
+                continue
+
+            piece = piece_list[piece_id]
+            for orientation in range(8):
+                for col in range(BOARD_HEIGHT):
+                    for row in range(BOARD_WIDTH):
+                        if(self.board.legal_play(player_id, True, piece, orientation, row, col, verbose=False)):
+                            moves_set.add((piece_id, orientation, col, row))
+
+        return list(moves_set)
 
 #reads all of the different piece shapes from a file
 #only call this ONCE, even if many games are played
@@ -305,6 +360,9 @@ def play_game(pieces, players):
         if turn == 1:
             first_round = False
 
+        if VERBOSE:
+            game.board.print_board()
+
     scores = [player.score for player in game.players]
     min_score = min(scores)
     winners = []
@@ -321,6 +379,7 @@ def play_game(pieces, players):
 
 if __name__ == '__main__':
     pieces = read_pieces(PIECES_FILE)
-    players = [Player(i) for i in range(1,NUM_PLAYERS+1)]
+    #players = [Player(i) for i in range(1,NUM_PLAYERS+1)]
+    players = [RandomPlayer(i) for i in range(1,NUM_PLAYERS+1)]
     play_game(pieces, players)
 
