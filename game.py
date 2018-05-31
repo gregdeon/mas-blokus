@@ -256,9 +256,11 @@ class Game:
                 continue
 
             piece = piece_list[piece_id]
-            for orientation in range(8):
-                for col in range(BOARD_HEIGHT):
-                    for row in range(BOARD_WIDTH):
+            for orientation in range(len(piece.area_masks)):
+                piece_mask = piece.area_masks[orientation]
+                (piece_height, piece_width) = piece_mask.shape
+                for col in range(BOARD_HEIGHT - (piece_height - 1)):
+                    for row in range(BOARD_WIDTH - (piece_width - 1)):
                         if(self.board.legal_play(player_id, True, piece, orientation, row, col, verbose=False)):
                             moves_set.add((piece_id, orientation, col, row))
 
