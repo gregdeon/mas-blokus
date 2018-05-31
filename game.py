@@ -1,4 +1,5 @@
 import numpy as np
+import random
 
 """
 Running this file will start a 4-(human)-player game of Blokus.
@@ -18,53 +19,128 @@ NUM_PLAYERS = 4
 CORNER_SENTINEL = 255
 PIECES_FILE = 'pieces.txt'
 VERBOSE = True
+EXTRA_TRACKING = True
 
 
 #NOT the complete game state
 #contains the board state as a numpy array
+#values are treated as bit string where the ith player is indicated by 1 << i
 #agents may want to use this to track their own possible board states
 class Board:
     def __init__(self):
+        #actual piece locations
         self.board = np.zeros((BOARD_HEIGHT+2, BOARD_WIDTH+2), dtype=np.uint8)
         self.board[0][0] = CORNER_SENTINEL
         self.board[0][BOARD_WIDTH+1] = CORNER_SENTINEL
         self.board[BOARD_HEIGHT+1][0] = CORNER_SENTINEL
         self.board[BOARD_HEIGHT+1][BOARD_WIDTH+1] = CORNER_SENTINEL
 
+        #locations adjacent to pieces, but not covered by them
+        self.adj_board = np.zeros((BOARD_HEIGHT + 2, BOARD_WIDTH + 2), dtype=np.uint8)
+
+        #locations diagonal to pieces, but not covered by any piece or adjacent to own colour
+        self.diag_board = np.zeros((BOARD_HEIGHT + 2, BOARD_WIDTH + 2), dtype=np.uint8)
+        self.diag_board[1][1] = CORNER_SENTINEL
+        self.diag_board[1][BOARD_WIDTH] = CORNER_SENTINEL
+        self.diag_board[BOARD_HEIGHT][1] = CORNER_SENTINEL
+        self.diag_board[BOARD_HEIGHT][BOARD_WIDTH] = CORNER_SENTINEL
+
     def print_board(self):
-        print(str(self.board[1:BOARD_HEIGHT+1,1:BOARD_WIDTH+1]) + '\n')
+        print(str(bitstoid(self.board[1:BOARD_HEIGHT+1,1:BOARD_WIDTH+1])+1) + '\n')
+        # print()
+        # print(str(bitstoid(self.adj_board[1:BOARD_HEIGHT + 1, 1:BOARD_WIDTH + 1]) + 1) + '\n')
+        # print()
+        # print(str(bitstoid(self.diag_board[1:BOARD_HEIGHT + 1, 1:BOARD_WIDTH + 1]) + 1) + '\n')
 
     # returns True iff the given piece, orientation, and position satisfy the rules of Blokus
     # note that player_id and piece_id inputs are assumed to be valid
-    def legal_play(self, player_id, first_round, piece, piece_or, row, col):
+    def legal_play(self, player_id, piece, piece_or, row, col, verbose=False):
         area_mask = piece.area_masks[piece_or]
         adj_mask = piece.adj_masks[piece_or]
         diag_mask = piece.diag_masks[piece_or]
         if row < 0 or row+np.shape(area_mask)[0] > BOARD_HEIGHT or col < 0 or col+np.shape(area_mask)[1] > BOARD_WIDTH:
-            if VERBOSE:
+            if verbose:
                 print('Row or Column out of range')
             return False
 
         board_chunk = self.board[row+1:row+1+np.shape(area_mask)[0],col+1:col+1+np.shape(area_mask)[1]]
         padded_board_chunk = self.board[row:row+np.shape(adj_mask)[0],col:col+np.shape(adj_mask)[1]]
-        if first_round:
-            padded_board_chunk = (padded_board_chunk==player_id) + (padded_board_chunk==CORNER_SENTINEL)
-        else:
-            padded_board_chunk = padded_board_chunk==player_id
+        player_mask = 1 << player_id
+        padded_board_chunk = padded_board_chunk & player_mask
 
         if np.any(np.logical_and(board_chunk, area_mask)):
-            if VERBOSE:
+            if verbose:
                 print('Overlapping another piece')
             return False
         if np.any(np.logical_and(padded_board_chunk, adj_mask)):
-            if VERBOSE:
+            if verbose:
                 print('Directly adjacent to your own piece')
             return False
         if not np.any(np.logical_and(padded_board_chunk, diag_mask)):
-            if VERBOSE:
+            if verbose:
                 print('Not diagonally touching your own piece')
             return False
         return True
+
+    # updates the board state after a move has been made
+    # note that all parameters must correspond to a valid move
+    def execute_play(self, player_id, piece, piece_or, row, col):
+        #update piece locations
+        player_mask = 1 << player_id
+        piece_stamp = player_mask*(piece.area_masks[piece_or])
+        piece_shape = np.shape(piece_stamp)
+        board_chunk = self.board[row+1:row+1+piece_shape[0],col+1:col+1+piece_shape[1]]
+        self.board[row+1:row+1+piece_shape[0],col+1:col+1+piece_shape[1]] = np.bitwise_or(board_chunk,piece_stamp)
+
+        if EXTRA_TRACKING:
+            #update adj locations
+            board_chunk = self.board[row:row+piece_shape[0]+2,col:col+piece_shape[1]+2]
+            adj_chunk = self.adj_board[row:row+piece_shape[0]+2,col:col+piece_shape[1]+2]
+            self.adj_board[row:row+piece_shape[0]+2,col:col+piece_shape[1]+2] = np.bitwise_and(adj_chunk,np.bitwise_not(board_chunk))
+            adj_stamp = player_mask*(np.logical_and(piece.adj_masks[piece_or],np.logical_not(board_chunk)))
+            self.adj_board[row:row+piece_shape[0]+2,col:col+piece_shape[1]+2] = np.bitwise_or(adj_chunk,adj_stamp)
+
+            #update diag locations
+            adj_chunk = self.adj_board[row:row+piece_shape[0]+2,col:col+piece_shape[1]+2]
+            diag_chunk = self.diag_board[row:row+piece_shape[0]+2,col:col+piece_shape[1]+2]
+            self.diag_board[row:row+piece_shape[0]+2,col:col+piece_shape[1]+2] = np.bitwise_and(diag_chunk,np.bitwise_not(board_chunk))
+            diag_stamp = np.logical_and(piece.diag_masks[piece_or],np.logical_not(board_chunk))
+            diag_stamp = np.logical_and(diag_stamp, np.logical_not(adj_chunk & player_mask))
+            diag_stamp = player_mask*diag_stamp
+            self.diag_board[row:row+piece_shape[0]+2,col:col+piece_shape[1]+2] = np.bitwise_or(diag_chunk, diag_stamp)
+
+
+    #produces a tuple of all possible plays for the given player ID and piece ID list
+    #in the form (piece_id, piece_or, row, col)
+    def possible_plays(self, player_id, piece_ids_left, pieces):
+        ans = set()
+        player_mask = 1 << player_id
+        player_diags = np.bitwise_and(player_mask, self.diag_board)
+
+        #locate corners for each of 4 types
+        bshp = np.shape(self.board)
+        shifted_boards = [np.bitwise_and(np.pad(self.board[1:,:bshp[1]-1],((0,1),(1,0)),'constant'),player_mask),
+                          np.bitwise_and(np.pad(self.board[1:,1:],((0,1),(0,1)),'constant'),player_mask),
+                          np.bitwise_and(np.pad(self.board[:bshp[0]-1,1:],((1,0),(0,1)),'constant'),player_mask),
+                          np.bitwise_and(np.pad(self.board[:bshp[0]-1,:bshp[1]-1],((1,0),(1,0)),'constant'),player_mask)]
+        for i in range(4):
+            rows, cols = np.where(np.logical_and(shifted_boards[i],player_diags))
+            piece_i = (i+2) % 4
+
+            #for each corner try all complimentary corners of all orientations of all available pieces
+            for j in range(len(rows)):
+                row = rows[j]
+                col = cols[j]
+                for pid in range(len(piece_ids_left)):
+                    if piece_ids_left[pid]:
+                        curr_piece = pieces[pid]
+                        for por in curr_piece.unique_ors:
+                            for posn in curr_piece.diag_locs[por][piece_i]:
+                                board_row = row - posn[0] - 1
+                                board_col = col - posn[1] - 1
+                                if self.legal_play(player_id, curr_piece, por, board_row, board_col, False):
+                                    ans.add((pid, por, board_row, board_col))
+        return tuple(ans)
 
 
 #inherit from this class for bots
@@ -95,7 +171,7 @@ class Player:
             game.board.print_board()
 
         while not valid_input:
-            key_str = input('Player ' + str(self.id) + ', enter piece ID and orientation (e.g. 0 0):\n')
+            key_str = input('Player ' + str(self.id+1) + ', enter piece ID and orientation (e.g. 0 0):\n')
             tokens = key_str.split()
             if len(tokens) >= 2:
                 try:
@@ -127,12 +203,12 @@ class Player:
 
         valid_input = False
         while not valid_input and piece_id != -1:
-            key_str = input('Enter column and row to place the top left corner of the piece (e.g. 0 0):\n')
+            key_str = input('Enter row and column to place the top left corner of the piece (e.g. 0 0):\n')
             tokens = key_str.split()
             if len(tokens) >= 2:
                 try:
-                    col = int(tokens[0])
-                    row = int(tokens[1])
+                    row = int(tokens[0])
+                    col = int(tokens[1])
                     valid_input = True
                 except:
                     if VERBOSE:
@@ -144,6 +220,23 @@ class Player:
         return piece_id, piece_or, row, col
 
 
+#a bot that plays randomly until it runs out of moves
+class RandomBot(Player):
+    def __init__(self, id):
+        Player.__init__(self,id)
+
+    def get_play(self, game):
+        possibilities = game.possible_plays(self.id)
+        if possibilities:
+            choice = possibilities[random.randint(0,len(possibilities)-1)]
+        else:
+            choice = (-1,-1,-1,-1)
+        if VERBOSE:
+            game.board.print_board()
+            input()
+        return choice
+
+
 #keeps all of the masks associated with one of the 21 pieces
 #the top left corner is (0,0) for all masks, even if there is a gap in the piece there
 class Piece:
@@ -153,7 +246,10 @@ class Piece:
         self.area_masks = []
         self.adj_masks = []
         self.diag_masks = []
+        self.diag_locs = [[None for _ in range(4)] for _ in range(8)]
+        self.unique_ors = []
 
+        #generate all 8 orientations
         for _ in range(4):
             self.area_masks.append(np.copy(area_mask))
             self.adj_masks.append(np.copy(adj_mask))
@@ -161,11 +257,9 @@ class Piece:
             area_mask = np.rot90(area_mask)
             adj_mask = np.rot90(adj_mask)
             diag_mask = np.rot90(diag_mask)
-
         area_mask = np.flip(area_mask,1)
         adj_mask = np.flip(adj_mask,1)
         diag_mask = np.flip(diag_mask,1)
-
         for _ in range(4):
             self.area_masks.append(np.copy(area_mask))
             self.adj_masks.append(np.copy(adj_mask))
@@ -174,8 +268,34 @@ class Piece:
             adj_mask = np.rot90(adj_mask)
             diag_mask = np.rot90(diag_mask)
 
+        #determine which orientations are unique
+        unique_masks = []
+        for i in range(len(self.area_masks)):
+            candidate = self.area_masks[i]
+            unique = True
+            for mask in unique_masks:
+                unique = unique and (not np.all(mask == candidate))
+            if unique:
+                self.unique_ors.append(i)
+                unique_masks.append(candidate)
+
+        #get locations with adjacent corners
+        padding_shapes = (((0,2),(2,0)),
+                          ((0,2),(0,2)),
+                          ((2,0),(0,2)),
+                          ((2,0),(2,0)))
+        reverse_shift = ((0,-2),(0,0),(-2,0),(-2,-2))
+        for i in range(len(self.area_masks)):
+            area = self.area_masks[i]
+            diag = self.diag_masks[i]
+            for j in range(4):
+                padded_area = np.pad(area,padding_shapes[j],'constant')
+                selected = np.logical_and(padded_area,diag)
+                row,col = np.where(selected)
+                self.diag_locs[i][j] = [(row[k]+reverse_shift[j][0],col[k]+reverse_shift[j][1]) for k in range(len(row))]
+
     def print_piece(self, piece_or, player_id):
-        print(str(player_id*(np.array(self.area_masks[piece_or], dtype=np.uint8))) + '\n')
+        print(str((player_id+1)*(np.array(self.area_masks[piece_or], dtype=np.uint8))) + '\n')
 
 
 #keeps the whole game state
@@ -189,24 +309,42 @@ class Game:
 
     #returns True iff the player actually has the piece chosen and the board position is valid
     #note that player_id and piece_id inputs are assumed to be valid
-    def legal_play(self, player_id, first_round, piece_id, piece_or, row, col):
-        player = self.players[player_id-1]
+    def legal_play(self, player_id, piece_id, piece_or, row, col, verbose=False):
+        player = self.players[player_id]
         if piece_id < 0 or piece_id >= NUM_PIECES or not player.pieces[piece_id]:
             if VERBOSE:
                 print('Piece ID invalid or already used')
             return False
-        return self.board.legal_play(player_id, first_round, self.pieces[piece_id], piece_or, row, col)
+        return self.board.legal_play(player_id, self.pieces[piece_id], piece_or, row, col, verbose)
 
     #updates the game state after a move has been made
     #note that all parameters must correspond to a valid move
     def execute_play(self, player_id, piece_id, piece_or, row, col):
-        player = self.players[player_id-1]
+        player = self.players[player_id]
         player.pieces[piece_id] = False
         player.score -= self.pieces[piece_id].value
-        piece_stamp = player_id*(self.pieces[piece_id].area_masks[piece_or])
-        piece_shape = np.shape(piece_stamp)
-        board_chunk = self.board.board[row+1:row+1+piece_shape[0],col+1:col+1+piece_shape[1]]
-        self.board.board[row+1:row+1+piece_shape[0],col+1:col+1+piece_shape[1]] = np.bitwise_or(board_chunk,piece_stamp)
+        self.board.execute_play(player_id, self.pieces[piece_id], piece_or, row, col)
+
+    #produces a tuple of all possible plays for the given player ID
+    #in the form (piece_id, piece_or, row, col)
+    def possible_plays(self, player_id):
+        return self.board.possible_plays(player_id, self.players[player_id].pieces,self.pieces)
+
+
+#takes a uint8 and produces the first player ID that matches
+#100 is an error value
+def bitstoid(bits):
+    if bits == 0:
+        return -1
+    else:
+        for i in range(8):
+            if bits & 1 != 0:
+                return i
+            bits = bits >> 1
+    if VERBOSE:
+        print('ERROR: bitstoid received an invalid bitstring')
+    return 100
+bitstoid = np.vectorize(bitstoid)
 
 
 #reads all of the different piece shapes from a file
@@ -268,6 +406,12 @@ def print_pieces(pieces):
         print("Diag Masks:")
         for mask in piece.diag_masks:
             print(np.array(mask, dtype=np.uint8))
+        print("Diag Points:")
+        for i in range(8):
+            for j in range(4):
+                print("Quadrant " + str(j+1) + ": " + str(piece.diag_locs[i][j]))
+        print("Unique Orientations:")
+        print(piece.unique_ors)
         print("")
 
 
@@ -276,11 +420,10 @@ def print_pieces(pieces):
 def play_game(pieces, players):
     game = Game(pieces, players)
     game_finished = False
-    first_round = True
-    turn = 1
+    turn = 0
 
     while not game_finished:
-        curr_player = game.players[turn - 1]
+        curr_player = game.players[turn]
         if not curr_player.finished:
             valid_play = False
             while not valid_play:
@@ -288,10 +431,10 @@ def play_game(pieces, players):
                 if piece_id == -1:
                     curr_player.finished = True
                     if VERBOSE:
-                        print("Player " + str(turn) + " has finished playing!\n")
+                        print("Player " + str(turn+1) + " has finished playing!\n")
                     break
                 else:
-                    valid_play = game.legal_play(turn, first_round, piece_id, piece_or, row, col)
+                    valid_play = game.legal_play(turn, piece_id, piece_or, row, col, VERBOSE)
                     if VERBOSE and not valid_play:
                         print('ERROR: Illegal play')
             if piece_id >= 0:
@@ -301,9 +444,7 @@ def play_game(pieces, players):
         for player in game.players:
             if not player.finished:
                 game_finished = False
-        turn = turn % NUM_PLAYERS + 1
-        if turn == 1:
-            first_round = False
+        turn = (turn+1) % NUM_PLAYERS
 
     scores = [player.score for player in game.players]
     min_score = min(scores)
@@ -321,6 +462,5 @@ def play_game(pieces, players):
 
 if __name__ == '__main__':
     pieces = read_pieces(PIECES_FILE)
-    players = [Player(i) for i in range(1,NUM_PLAYERS+1)]
+    players = [RandomBot(i) for i in range(NUM_PLAYERS)]
     play_game(pieces, players)
-
