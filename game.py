@@ -21,6 +21,14 @@ PIECES_FILE = 'pieces.txt'
 VERBOSE = True
 EXTRA_TRACKING = True
 
+PRINT_COLOUR = True
+
+if PRINT_COLOUR:
+    from colorama import Fore, Back, Style, init
+    init(convert=True)
+    FORE_ARRAY = [Fore.RED, Fore.BLUE, Fore.GREEN, Fore.YELLOW]
+    BACK_ARRAY = [Back.RED, Back.BLUE, Back.GREEN, Back.YELLOW]
+
 
 #NOT the complete game state
 #contains the board state as a numpy array
@@ -51,6 +59,25 @@ class Board:
         # print(str(bitstoid(self.adj_board[1:BOARD_HEIGHT + 1, 1:BOARD_WIDTH + 1]) + 1) + '\n')
         # print()
         # print(str(bitstoid(self.diag_board[1:BOARD_HEIGHT + 1, 1:BOARD_WIDTH + 1]) + 1) + '\n')
+
+    def print_board(self):
+        if PRINT_COLOUR:
+            self.print_board_coloured()
+        else:
+            print(str(bitstoid(self.board[1:BOARD_HEIGHT+1,1:BOARD_WIDTH+1])+1) + '\n')
+
+    def print_board_coloured(self):
+        for y in range(BOARD_HEIGHT):
+            line = ''
+            for x in range(BOARD_WIDTH):
+                piece = bitstoid(self.board[y+1][x+1])
+                if(piece >= 0):
+                    line += FORE_ARRAY[piece] + BACK_ARRAY[piece] + str(piece)
+                else:
+                    line += Style.RESET_ALL + '.'
+            line += Style.RESET_ALL
+            print(line)
+        print('')
 
     # returns True iff the given piece, orientation, and position satisfy the rules of Blokus
     # note that player_id and piece_id inputs are assumed to be valid
