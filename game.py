@@ -1,5 +1,6 @@
 import numpy as np
 import random
+import time
 
 """
 Running this file will start a 4-(human)-player game of Blokus.
@@ -17,11 +18,23 @@ NUM_PIECES = 21
 START_SCORE = 89
 NUM_PLAYERS = 4
 CORNER_SENTINEL = 255
+NUM_STATS_GAMES = 100
 PIECES_FILE = 'pieces.txt'
-VERBOSE = True
+VERBOSE = False
 EXTRA_TRACKING = True
-
+TRACK_STATS = True
 PRINT_COLOUR = True
+
+#global vars for stats
+stats = {}
+stats['num_games'] = 0
+stats['num_wins'] = [0 for _ in range(4)]
+stats['game_time'] = []
+stats['num_plays'] = []
+stats['num_branch'] = []
+stats['avg_branch'] = []
+stats['max_branch'] = []
+stats['max_branch_turn'] = []
 
 if PRINT_COLOUR:
     from colorama import Fore, Back, Style, init
@@ -253,7 +266,11 @@ class RandomBot(Player):
         Player.__init__(self,id)
 
     def get_play(self, game):
+        global stats
         possibilities = game.possible_plays(self.id)
+        if TRACK_STATS:
+            stats['num_plays'][-1] += 1
+            stats['num_branch'][-1].append(len(possibilities))
         if possibilities:
             choice = possibilities[random.randint(0,len(possibilities)-1)]
         else:
@@ -445,6 +462,10 @@ def print_pieces(pieces):
 #play a 4-player game of Blokus
 #takes a list of Pieces and Players as input
 def play_game(pieces, players):
+    global stats
+    if TRACK_STATS:
+        stats['num_games'] += 1
+
     game = Game(pieces, players)
     game_finished = False
     turn = 0
@@ -478,6 +499,8 @@ def play_game(pieces, players):
     winners = []
     for i in range(len(game.players)):
         if game.players[i].score == min_score:
+            if TRACK_STATS:
+                stats['num_wins'][i] += 1
             winners.append(i+1)
     if VERBOSE:
         if len(winners) == 1:
@@ -487,7 +510,49 @@ def play_game(pieces, players):
     return winners
 
 
+#nice formatting for number printing
+def print_num(num):
+    return str(int(100*np.round(num,2))/100.0)
+
+
+#calculate and print out some basic stats for a large number of games
+def calc_stats(pieces, player_type):
+    global stats
+    for i in range(NUM_STATS_GAMES):
+        stats['num_plays'].append(0)
+        stats['num_branch'].append([])
+
+        players = [player_type(i) for i in range(NUM_PLAYERS)]
+        game_start_time = time.time()
+        play_game(pieces, players)
+        game_end_time = time.time()
+
+        stats['game_time'].append(game_end_time - game_start_time)
+        stats['avg_branch'].append(np.mean(stats['num_branch'][-1]))
+        stats['max_branch'].append(np.max(stats['num_branch'][-1]))
+        stats['max_branch_turn'].append(np.argmax(stats['num_branch'][-1]))
+
+        if ((i+1)*10)%NUM_STATS_GAMES == 0:
+            print(str(int(100*(i+1.0)/NUM_STATS_GAMES)) + '%')
+
+    print()
+    print('Games played: ' + str(stats['num_games']))
+    print_str = 'Win %:'
+    for i in range(NUM_PLAYERS):
+        print_str += ' Player ' + str(i+1) + ' - ' + print_num(100*float(stats['num_wins'][i])/stats['num_games']) + ', '
+    print(print_str)
+    print('Time per game (s): ' + print_num(np.mean(stats['game_time'])) + ' +\\- ' + print_num(np.std(stats['game_time'])))
+    print('Plays per game: ' + print_num(np.mean(stats['num_plays'])) + ' +\\- ' + print_num(np.std(stats['num_plays'])))
+    print('Avg. branching factor: ' + print_num(np.mean(stats['avg_branch'])) + ' +\\- ' + print_num(np.std(stats['avg_branch'])))
+    print('Max branching factor: ' + print_num(np.mean(stats['max_branch'])) + ' +\\- ' + print_num(np.std(stats['max_branch'])))
+    print('Max branching turn: ' + print_num(np.mean(stats['max_branch_turn'])) + ' +\\- ' + print_num(np.std(stats['max_branch_turn'])) \
+          + ' (round ' + str(int(np.floor(np.mean(stats['max_branch_turn'])/NUM_PLAYERS))) + ')')
+
+
 if __name__ == '__main__':
     pieces = read_pieces(PIECES_FILE)
     players = [RandomBot(i) for i in range(NUM_PLAYERS)]
-    play_game(pieces, players)
+    if TRACK_STATS:
+        calc_stats(pieces, RandomBot)
+    else:
+        play_game(pieces, players)
