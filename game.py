@@ -48,6 +48,8 @@ if PRINT_COLOUR:
 #values are treated as bit string where the ith player is indicated by 1 << i
 #agents may want to use this to track their own possible board states
 class Board:
+	
+
     def __init__(self):
         #actual piece locations
         self.board = np.zeros((BOARD_HEIGHT+2, BOARD_WIDTH+2), dtype=np.uint8)
@@ -389,6 +391,14 @@ def bitstoid(bits):
         print('ERROR: bitstoid received an invalid bitstring')
     return 100
 bitstoid = np.vectorize(bitstoid)
+
+
+def idtobits(id):
+	if(id != 0):
+		return 1 << (id - 1)
+	else:
+		return 0
+idtobits = np.vectorize(idtobits)
 
 
 #reads all of the different piece shapes from a file

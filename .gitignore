@@ -1,0 +1,5 @@
+*.txt
+*.zip
+*.7z
+
+__pycache__/*
