@@ -57,6 +57,12 @@ class Piece:
                 row,col = np.where(selected)
                 self.diag_locs[i][j] = [(row[k]+reverse_shift[j][0],col[k]+reverse_shift[j][1]) for k in range(len(row))]
 
+    #make a deep copy
+    #Note: This is expensive, and there's really no reason to use it unless you're really worried
+    #      about someone changing your pieces
+    def copy(self):
+        return Piece(self.id, self.value, np.copy(self.area_mask[0]), np.copy(self.adj_mask[0]), np.copy(self.diag_mask[0]))
+
     def print_piece(self, piece_or, player_id):
         print(str((player_id+1)*(np.array(self.area_masks[piece_or], dtype=np.uint8))) + '\n')
 

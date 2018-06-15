@@ -9,6 +9,21 @@ class Game:
         self.board = Board()
         self.players = players
         self.pieces = pieces
+        self.turn = 0
+
+    #make a deep copy
+    #the list of pieces will be deep copied only if deep_copy_pieces is set to True
+    #(which is expensive and should only be done if you're super worried about someone changing them)
+    def copy(self, deep_copy_pieces=False):
+        if deep_copy_pieces:
+            new_pieces = [piece.copy() for piece in self.pieces]
+        else:
+            new_pieces = self.pieces
+        new_players = [player.copy() for player in players]
+        new_game = Game(new_pieces, new_players)
+        new_game.board = self.board.copy()
+        new_game.turn = self.turn
+        return new_game
 
     #returns True iff the player actually has the piece chosen and the board position is valid
     #note that player_id and piece_id inputs are assumed to be valid
@@ -23,10 +38,17 @@ class Game:
     #updates the game state after a move has been made
     #note that all parameters must correspond to a valid move
     def execute_play(self, player_id, piece_id, piece_or, row, col):
+        if VERBOSE and player_id != self.turn:
+            print("Player " + str(player_id) + " is playing out of turn!")
         player = self.players[player_id]
         player.pieces[piece_id] = False
         player.score -= self.pieces[piece_id].value
         self.board.execute_play(player_id, self.pieces[piece_id], piece_or, row, col)
+        self.turn = (self.turn+1) % NUM_PLAYERS
+
+    #move to the next turn without doing anything
+    def pass_turn(self):
+        self.turn = (self.turn+1) % NUM_PLAYERS
 
     #produces a tuple of all possible plays for the given player ID
     #in the form (piece_id, piece_or, row, col)
@@ -43,10 +65,9 @@ def play_game(pieces, players):
 
     game = Game(pieces, players)
     game_finished = False
-    turn = 0
 
     while not game_finished:
-        curr_player = game.players[turn]
+        curr_player = game.players[game.turn]
         if not curr_player.finished:
             valid_play = False
             while not valid_play:
@@ -54,20 +75,23 @@ def play_game(pieces, players):
                 if piece_id == -1:
                     curr_player.finished = True
                     if VERBOSE:
-                        print("Player " + str(turn+1) + " has finished playing!\n")
+                        print("Player " + str(game.turn+1) + " has finished playing!\n")
                     break
                 else:
-                    valid_play = game.legal_play(turn, piece_id, piece_or, row, col, VERBOSE)
+                    valid_play = game.legal_play(game.turn, piece_id, piece_or, row, col, VERBOSE)
                     if VERBOSE and not valid_play:
                         print('ERROR: Illegal play')
             if piece_id >= 0:
-                game.execute_play(turn, piece_id, piece_or, row, col)
+                game.execute_play(game.turn, piece_id, piece_or, row, col)
+            else:
+                game.pass_turn()
+        else:
+            game.pass_turn()
 
         game_finished = True
         for player in game.players:
             if not player.finished:
                 game_finished = False
-        turn = (turn+1) % NUM_PLAYERS
 
     scores = [player.score for player in game.players]
     min_score = min(scores)
@@ -83,3 +107,17 @@ def play_game(pieces, players):
         else:
             print('The winners are Players ' + str(winners) + ' with score ' + str(min_score) + '!\n')
     return winners
+
+
+# if __name__ == '__main__':
+#     from piece import read_pieces
+#     from random_bot import RandomBot
+#     pieces = read_pieces(PIECES_FILE)
+#     players = [RandomBot(i) for i in range(NUM_PLAYERS)]
+#     test_game = Game(pieces, players)
+#     copy_game = test_game.copy()
+#     copy_game.execute_play(0, 1, 0, 0, 0)
+#     print("Original State")
+#     print(test_game.board.print_board())
+#     print("Copy State")
+#     print(copy_game.board.print_board())

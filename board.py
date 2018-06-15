@@ -9,30 +9,86 @@ from util import *
 #agents may want to use this to track their own possible board states
 class Board:
 
-    def __init__(self):
-        #actual piece locations
-        self.board = np.zeros((BOARD_HEIGHT+2, BOARD_WIDTH+2), dtype=np.uint8)
-        self.board[0][0] = CORNER_SENTINEL
-        self.board[0][BOARD_WIDTH+1] = CORNER_SENTINEL
-        self.board[BOARD_HEIGHT+1][0] = CORNER_SENTINEL
-        self.board[BOARD_HEIGHT+1][BOARD_WIDTH+1] = CORNER_SENTINEL
+    def __init__(self, other_board=None):
+        #default constructor
+        if other_board is None:
+            #actual piece locations
+            self.board = np.zeros((BOARD_HEIGHT+2, BOARD_WIDTH+2), dtype=np.uint8)
+            self.board[0][0] = CORNER_SENTINEL
+            self.board[0][BOARD_WIDTH+1] = CORNER_SENTINEL
+            self.board[BOARD_HEIGHT+1][0] = CORNER_SENTINEL
+            self.board[BOARD_HEIGHT+1][BOARD_WIDTH+1] = CORNER_SENTINEL
 
-        #locations adjacent to pieces, but not covered by them
-        self.adj_board = np.zeros((BOARD_HEIGHT + 2, BOARD_WIDTH + 2), dtype=np.uint8)
+            #locations adjacent to pieces, but not covered by them
+            self.adj_board = np.zeros((BOARD_HEIGHT + 2, BOARD_WIDTH + 2), dtype=np.uint8)
 
-        #locations diagonal to pieces, but not covered by any piece or adjacent to own colour
-        self.diag_board = np.zeros((BOARD_HEIGHT + 2, BOARD_WIDTH + 2), dtype=np.uint8)
-        self.diag_board[1][1] = CORNER_SENTINEL
-        self.diag_board[1][BOARD_WIDTH] = CORNER_SENTINEL
-        self.diag_board[BOARD_HEIGHT][1] = CORNER_SENTINEL
-        self.diag_board[BOARD_HEIGHT][BOARD_WIDTH] = CORNER_SENTINEL
+            #locations diagonal to pieces, but not covered by any piece or adjacent to own colour
+            self.diag_board = np.zeros((BOARD_HEIGHT + 2, BOARD_WIDTH + 2), dtype=np.uint8)
+            self.diag_board[1][1] = CORNER_SENTINEL
+            self.diag_board[1][BOARD_WIDTH] = CORNER_SENTINEL
+            self.diag_board[BOARD_HEIGHT][1] = CORNER_SENTINEL
+            self.diag_board[BOARD_HEIGHT][BOARD_WIDTH] = CORNER_SENTINEL
 
-    def print_board(self):
-        print(str(bitstoid(self.board[1:BOARD_HEIGHT+1,1:BOARD_WIDTH+1])+1) + '\n')
-        # print()
-        # print(str(bitstoid(self.adj_board[1:BOARD_HEIGHT + 1, 1:BOARD_WIDTH + 1]) + 1) + '\n')
-        # print()
-        # print(str(bitstoid(self.diag_board[1:BOARD_HEIGHT + 1, 1:BOARD_WIDTH + 1]) + 1) + '\n')
+        #constructs a board by deep copying a given Board
+        elif isinstance(other_board, Board):
+            self.board = np.copy(other_board.board)
+            self.adj_board = np.copy(other_board.adj_board)
+            self.diag_board = np.copy(other_board.diag_board)
+
+        #constructs a board from a numpy array
+        elif isinstance(other_board, np.ndarray):
+            num_rows = np.shape(other_board)[0]
+            num_cols = np.shape(other_board)[1]
+            if num_rows == BOARD_HEIGHT+2 and num_cols == BOARD_WIDTH+2:
+                self.board = np.copy(other_board)
+            elif num_rows == BOARD_HEIGHT and num_cols == BOARD_WIDTH:
+                self.board = np.zeros((BOARD_HEIGHT+2, BOARD_WIDTH+2), dtype=np.uint8)
+                self.board[0][0] = CORNER_SENTINEL
+                self.board[0][BOARD_WIDTH+1] = CORNER_SENTINEL
+                self.board[BOARD_HEIGHT+1][0] = CORNER_SENTINEL
+                self.board[BOARD_HEIGHT+1][BOARD_WIDTH+1] = CORNER_SENTINEL
+                self.board[1:-1,1:-1] = np.copy(other_board)
+            else:
+                if VERBOSE:
+                    print("ERROR: numpy array of invalid size given to Board constructor")
+                return
+            self.adj_board = np.zeros((BOARD_HEIGHT + 2, BOARD_WIDTH + 2), dtype=np.uint8)
+            self.diag_board = np.zeros((BOARD_HEIGHT + 2, BOARD_WIDTH + 2), dtype=np.uint8)
+            if EXTRA_TRACKING:
+                unoccupied = ALL_ONES*np.logical_not(self.board)
+                #update adj locations
+                adj_candidates = [np.pad(self.board[1:,:],((0,1),(0,0)),'constant'),
+                                  np.pad(self.board[:-1,:],((1,0),(0,0)),'constant'),
+                                  np.pad(self.board[:,1:],((0,0),(0,1)),'constant'),
+                                  np.pad(self.board[:,:-1],((0,0),(1,0)),'constant')]
+                for cand in adj_candidates:
+                    self.adj_board = np.bitwise_or(self.adj_board, cand)
+                self.adj_board = np.bitwise_and(self.adj_board, unoccupied)
+                #update diag locations
+                diag_candidates = [np.pad(self.board[1:,:-1],((0,1),(1,0)),'constant'),
+                                   np.pad(self.board[1:,1:],((0,1),(0,1)),'constant'),
+                                   np.pad(self.board[:-1,1:],((1,0),(0,1)),'constant'),
+                                   np.pad(self.board[:-1,:-1],((1,0),(1,0)),'constant')]
+                for cand in diag_candidates:
+                    self.diag_board = np.bitwise_or(self.diag_board, cand)
+                self.diag_board = np.bitwise_and(self.diag_board, unoccupied)
+                self.diag_board = np.bitwise_and(self.diag_board, np.bitwise_not(self.adj_board))
+
+        #constructs a board from another Board (deep copy)
+        elif isinstance(other_board, Board):
+            self.board = np.copy(other_board.board)
+            self.adj_board = np.copy(other_board.adj_board)
+            self.diag_board = np.copy(other_board.diag_board)
+
+        else:
+            if VERBOSE:
+                print("ERROR: Invalid arguments given to Board constructor")
+
+
+    #make a deep copy
+    def copy(self):
+        return Board(self)
+
 
     def print_board(self):
         if PRINT_COLOUR:
@@ -142,3 +198,21 @@ class Board:
                                 if self.legal_play(player_id, curr_piece, por, board_row, board_col, False):
                                     ans.add((pid, por, board_row, board_col))
         return tuple(ans)
+
+
+# if __name__ == '__main__':
+#     ar = np.zeros((BOARD_HEIGHT, BOARD_WIDTH), dtype=np.uint8)
+#     ar[2][2] = 1
+#     ar[2][3] = 1
+#     ar[3][3] = 1
+#     ar[2][4] = 4
+#     ar[3][4] = 4
+#     ar[4][4] = 4
+#     test_board = Board(ar)
+#     print(test_board.print_board())
+#     print("Board")
+#     print(test_board.board)
+#     print("Adj Board")
+#     print(test_board.adj_board)
+#     print("Diag Board")
+#     print(test_board.diag_board)

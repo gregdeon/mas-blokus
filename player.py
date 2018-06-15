@@ -9,6 +9,14 @@ class Player:
         self.pieces = np.ones(NUM_PIECES, dtype=np.bool) #array of bools tracking which pieces are left
         self.finished = False #true when the player is done playing (must manually enter -1 on turn)
 
+    #make a deep copy
+    def copy(self):
+        new_player = self.__class__(self.id)
+        new_player.score = self.score
+        new_player.pieces = np.copy(self.pieces)
+        new_player.finished = self.finished
+        return new_player
+
     #this method should be overridden by autonomous agents
     #it is currently set up to take keyboard input from a human user
     #the entire game is passed as a parameter
