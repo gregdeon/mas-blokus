@@ -19,5 +19,10 @@ class RandomBot(Player):
             choice = (-1,-1,-1,-1)
         if VERBOSE:
             game.board.print_board()
+            # print(game.board.board)
+            # piece_arrays = [player.pieces for player in game.players]
+            # for arr in piece_arrays:
+            #     print(arr)
+            # print(game.turn)
             input()
         return choice

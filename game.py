@@ -6,11 +6,23 @@ from board import Board
 class Game:
     #note that a list of Pieces is take as input
     #this is because you only want to initialize the Piece list once, regardless of the number of games played
-    def __init__(self, pieces, players):
-        self.board = Board()
+    def __init__(self, pieces, players, board=None, player_pieces=None, turn=None):
         self.players = players
         self.pieces = pieces
-        self.turn = 0
+        if board is None:
+            self.board = Board()
+            self.turn = 0
+        else:
+            self.board = Board(board)
+            self.turn = turn
+            for i in range(len(player_pieces)):
+                curr = player_pieces[i]
+                score = START_SCORE
+                for p_id in range(len(curr)):
+                    if not curr[p_id]:
+                        score -= pieces[p_id].value
+                self.players[i].pieces = curr
+                self.players[i].score = score
 
     #Note: does not hash on pieces
     def __hash__(self):
@@ -30,7 +42,7 @@ class Game:
             new_pieces = [piece.copy() for piece in self.pieces]
         else:
             new_pieces = self.pieces
-        new_players = [player.copy() for player in players]
+        new_players = [player.copy() for player in self.players]
         new_game = Game(new_pieces, new_players)
         new_game.board = self.board.copy()
         new_game.turn = self.turn
