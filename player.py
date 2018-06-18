@@ -9,6 +9,12 @@ class Player:
         self.pieces = np.ones(NUM_PIECES, dtype=np.bool) #array of bools tracking which pieces are left
         self.finished = False #true when the player is done playing (must manually enter -1 on turn)
 
+    def __hash__(self):
+        return hash((hash(self.id),hash(self.finished),hash(self.pieces.tobytes())))
+
+    def __eq__(self, other):
+        return self.id==other.id and self.finished==other.finished and np.all(self.pieces==other.pieces)
+
     #make a deep copy
     def copy(self):
         new_player = self.__class__(self.id)

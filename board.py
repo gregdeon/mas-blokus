@@ -85,6 +85,12 @@ class Board:
                 print("ERROR: Invalid arguments given to Board constructor")
 
 
+    def __hash__(self):
+        return hash(self.board.tobytes())
+
+    def __eq__(self, other):
+        return np.all(self.board==other.board)
+
     #make a deep copy
     def copy(self):
         return Board(self)
@@ -200,7 +206,8 @@ class Board:
         return tuple(ans)
 
 
-# if __name__ == '__main__':
+if __name__ == '__main__':
+    pass
 #     ar = np.zeros((BOARD_HEIGHT, BOARD_WIDTH), dtype=np.uint8)
 #     ar[2][2] = 1
 #     ar[2][3] = 1

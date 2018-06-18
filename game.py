@@ -1,3 +1,4 @@
+import numpy as np
 from constants import *
 from board import Board
 
@@ -10,6 +11,16 @@ class Game:
         self.players = players
         self.pieces = pieces
         self.turn = 0
+
+    #Note: does not hash on pieces
+    def __hash__(self):
+        player_tuple = tuple([hash(player) for player in self.players])
+        return hash((hash(self.board),self.turn)+player_tuple)
+
+    #Note: does not compare pieces
+    def __eq__(self, other):
+        player_bool = np.all([self.players[i]==other.players[i] for i in range(len(self.players))])
+        return self.board==other.board and player_bool and self.turn==other.turn
 
     #make a deep copy
     #the list of pieces will be deep copied only if deep_copy_pieces is set to True
@@ -52,7 +63,9 @@ class Game:
 
     #produces a tuple of all possible plays for the given player ID
     #in the form (piece_id, piece_or, row, col)
-    def possible_plays(self, player_id):
+    def possible_plays(self, player_id=None):
+        if player_id is None:
+            player_id = self.turn
         return self.board.possible_plays(player_id, self.players[player_id].pieces,self.pieces)
 
 
@@ -109,15 +122,16 @@ def play_game(pieces, players):
     return winners
 
 
-# if __name__ == '__main__':
-#     from piece import read_pieces
-#     from random_bot import RandomBot
-#     pieces = read_pieces(PIECES_FILE)
-#     players = [RandomBot(i) for i in range(NUM_PLAYERS)]
-#     test_game = Game(pieces, players)
-#     copy_game = test_game.copy()
-#     copy_game.execute_play(0, 1, 0, 0, 0)
-#     print("Original State")
-#     print(test_game.board.print_board())
-#     print("Copy State")
-#     print(copy_game.board.print_board())
+if __name__ == '__main__':
+    pass
+    # from piece import read_pieces
+    # from random_bot import RandomBot
+    # pieces = read_pieces(PIECES_FILE)
+    # players = [RandomBot(i) for i in range(NUM_PLAYERS)]
+    # test_game = Game(pieces, players)
+    # copy_game = test_game.copy()
+    # copy_game.execute_play(0, 1, 0, 0, 0)
+    # print("Original State")
+    # print(test_game.board.print_board())
+    # print("Copy State")
+    # print(copy_game.board.print_board())
