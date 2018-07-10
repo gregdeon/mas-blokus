@@ -1,4 +1,5 @@
 import numpy as np
+import random
 from constants import *
 from util import *
 
@@ -204,6 +205,48 @@ class Board:
                                 if self.legal_play(player_id, curr_piece, por, board_row, board_col, False):
                                     ans.add((pid, por, board_row, board_col))
         return tuple(ans)
+
+
+    #produces one possible plays for the given player ID and piece ID list in the form (piece_id, piece_or, row, col)
+    def one_possible_play(self, player_id, piece_ids_left, pieces):
+        ans = None
+        player_mask = 1 << player_id
+        player_diags = np.bitwise_and(player_mask, self.diag_board)
+
+        #locate corners for each of 4 types
+        bshp = np.shape(self.board)
+        shifted_boards = [np.bitwise_and(np.pad(self.board[1:,:bshp[1]-1],((0,1),(1,0)),'constant'),player_mask),
+                          np.bitwise_and(np.pad(self.board[1:,1:],((0,1),(0,1)),'constant'),player_mask),
+                          np.bitwise_and(np.pad(self.board[:bshp[0]-1,1:],((1,0),(0,1)),'constant'),player_mask),
+                          np.bitwise_and(np.pad(self.board[:bshp[0]-1,:bshp[1]-1],((1,0),(1,0)),'constant'),player_mask)]
+        r_4 = list(range(4))
+        random.shuffle(r_4)
+        for i in r_4:
+            rows, cols = np.where(np.logical_and(shifted_boards[i],player_diags))
+            piece_i = (i+2) % 4
+
+            #for each corner try all complimentary corners of all orientations of all available pieces
+            r_rows = list(range(len(rows)))
+            random.shuffle(r_rows)
+            for j in r_rows:
+                row = rows[j]
+                col = cols[j]
+                r_pids = list(range(len(piece_ids_left)))
+                random.shuffle(r_pids)
+                for pid in r_pids:
+                    if piece_ids_left[pid]:
+                        curr_piece = pieces[pid]
+                        r_pors = curr_piece.unique_ors[:]
+                        random.shuffle(r_pors)
+                        for por in r_pors:
+                            r_posns = curr_piece.diag_locs[por][piece_i][:]
+                            random.shuffle(r_posns)
+                            for posn in r_posns:
+                                board_row = row - posn[0] - 1
+                                board_col = col - posn[1] - 1
+                                if self.legal_play(player_id, curr_piece, por, board_row, board_col, False):
+                                    return (pid, por, board_row, board_col)
+        return ans
 
 
 if __name__ == '__main__':

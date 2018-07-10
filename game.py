@@ -63,6 +63,8 @@ class Game:
     def execute_play(self, player_id, piece_id, piece_or, row, col):
         if VERBOSE and player_id != self.turn:
             print("Player " + str(player_id) + " is playing out of turn!")
+        for p in self.players:
+            p.receive_play(self, (player_id, piece_id, piece_or, row, col))
         player = self.players[player_id]
         player.pieces[piece_id] = False
         player.score -= self.pieces[piece_id].value
@@ -71,6 +73,8 @@ class Game:
 
     #move to the next turn without doing anything
     def pass_turn(self):
+        for p in self.players:
+            p.receive_play(self, (self.turn, -1, -1, -1, -1))
         self.turn = (self.turn+1) % NUM_PLAYERS
 
     #produces a tuple of all possible plays for the given player ID
@@ -79,6 +83,30 @@ class Game:
         if player_id is None:
             player_id = self.turn
         return self.board.possible_plays(player_id, self.players[player_id].pieces,self.pieces)
+
+    #produces one possible play for the given player ID in the form (piece_id, piece_or, row, col)
+    def one_possible_play(self, player_id=None):
+        if player_id is None:
+            player_id = self.turn
+        return self.board.one_possible_play(player_id, self.players[player_id].pieces,self.pieces)
+
+    #returns True if the game is over, else returns False
+    def is_finished(self):
+        game_finished = True
+        for player in self.players:
+            if not player.finished:
+                game_finished = False
+        return game_finished
+
+    #returns a list of the player IDs of players currently in the lead
+    def get_leaders(self):
+        scores = [player.score for player in self.players]
+        min_score = min(scores)
+        leaders = []
+        for player in self.players:
+            if player.score == min_score:
+                leaders.append(player.id)
+        return leaders
 
 
 #play a 4-player game of Blokus
@@ -112,11 +140,7 @@ def play_game(pieces, players):
                 game.pass_turn()
         else:
             game.pass_turn()
-
-        game_finished = True
-        for player in game.players:
-            if not player.finished:
-                game_finished = False
+        game_finished = game.is_finished()
 
     scores = [player.score for player in game.players]
     min_score = min(scores)

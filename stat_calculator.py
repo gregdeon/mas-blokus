@@ -5,13 +5,13 @@ from game import play_game
 from util import *
 
 #calculate and print out some basic stats for a large number of games
-def calc_stats(pieces, player_type):
+def calc_stats(pieces, orig_players):
     global stats
     for i in range(NUM_STATS_GAMES):
         stats['num_plays'].append(0)
         stats['num_branch'].append([])
 
-        players = [player_type(i) for i in range(NUM_PLAYERS)]
+        players = [player.copy() for player in orig_players]#[player_type(i) for i in range(NUM_PLAYERS)]
         game_start_time = time.time()
         play_game(pieces, players)
         game_end_time = time.time()

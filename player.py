@@ -23,6 +23,11 @@ class Player:
         new_player.finished = self.finished
         return new_player
 
+    #after any player makes a play, that information will be passed to all players via this function
+    #game is the Game object before the play, and last_play is a tuple of the form (player_id, piece_id, piece_or, row, col)
+    def receive_play(self, game, last_play):
+        pass
+
     #this method should be overridden by autonomous agents
     #it is currently set up to take keyboard input from a human user
     #the entire game is passed as a parameter

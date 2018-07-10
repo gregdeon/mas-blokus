@@ -13,6 +13,7 @@ from constants import *
 from board import *
 from player import Player
 from random_bot import RandomBot
+from mcts import MCTSBot
 from stat_calculator import *
 from game import *
 from piece import *
@@ -20,8 +21,9 @@ from piece import *
 
 if __name__ == '__main__':
     pieces = read_pieces(PIECES_FILE)
-    players = [RandomBot(i) for i in range(NUM_PLAYERS)]
+    #players = [RandomBot(i) for i in range(NUM_PLAYERS)]
+    players = [RandomBot(i) for i in range(3)] + [MCTSBot(3, pieces, 5.0, 1.414, 'ucb1', None)]
     if TRACK_STATS:
-        calc_stats(pieces, RandomBot)
+        calc_stats(pieces, players)
     else:
         play_game(pieces, players)
